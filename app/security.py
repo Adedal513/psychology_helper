@@ -7,6 +7,7 @@
 3. ожидаемый hash = HMAC_SHA256(key=secret_key, msg=data_check_string), hex
 4. сравнение — только через constant-time compare_digest.
 """
+
 import hashlib
 import hmac
 import json
@@ -34,9 +35,7 @@ def validate_init_data(init_data: str) -> dict:
     if not received_hash:
         raise InitDataError("hash missing")
 
-    data_check_string = "\n".join(
-        f"{k}={v}" for k, v in sorted(pairs.items())
-    )
+    data_check_string = "\n".join(f"{k}={v}" for k, v in sorted(pairs.items()))
     secret_key = hmac.new(
         b"WebAppData", settings.bot_token.encode(), hashlib.sha256
     ).digest()
