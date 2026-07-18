@@ -201,6 +201,13 @@
     line-height: 1.5;
   }
 
+  .err {
+    display: none;
+    font-size: 13px;
+    color: #A9756F;
+    text-align: center;
+  }
+
   .chat-screen { padding: 0; }
 
   .chat-head {
@@ -384,6 +391,7 @@
       <button class="chip">Самооценка</button>
       <button class="chip">Просто поговорить</button>
     </div>
+    <p class="err" id="profileErr">Не удалось сохранить профиль. Попробуйте ещё раз.</p>
     <button class="btn" id="topicNext" disabled onclick="startChat()">Перейти к беседе</button>
     <button class="btn ghost" onclick="go(2)">Назад</button>
     <div class="dots"><i></i><i></i><i class="on"></i></div>
@@ -406,9 +414,7 @@
 </div>
 
 <script>
-/* ── Инициализация Telegram Mini App ─────────────────────
-   Вне Telegram (DEV_MODE на бэкенде) tg === undefined,
-   initData === "" — страница остаётся рабочей в браузере. */
+/* ── Инициализация Telegram Mini App ───────────────────── */
 const tg = window.Telegram?.WebApp;
 if (tg) {
   tg.ready();
@@ -423,9 +429,19 @@ function go(n) {
   screens.forEach((s, i) => s.classList.toggle("active", i === n));
 }
 
+async function api(path, payload) {
+  const res = await fetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ init_data: initData, ...payload }),
+  });
+  if (!res.ok) throw new Error("HTTP " + res.status);
+  return res.json();
+}
+
 /* Шаг 1: имя предзаполняется из Telegram-профиля.
-   Показ имени на фронте — из initDataUnsafe, это допустимо:
-   доверенная проверка всё равно происходит на бэкенде по сырому initData. */
+   initDataUnsafe — только для отображения; доверенная проверка
+   происходит на бэкенде по сырому initData. */
 const nameField = document.getElementById("nameField");
 const tgName = tg?.initDataUnsafe?.user?.first_name ?? "";
 if (tgName) {
@@ -438,7 +454,7 @@ nameField.addEventListener("input", () => {
   document.getElementById("nameNext").disabled = state.name.length < 2;
 });
 
-/* Шаг 2: возраст с мягким гейтом 18+ (дублируется на бэкенде в шаге 3) */
+/* Шаг 2: возраст с мягким гейтом 18+ (дублируется на бэкенде) */
 const ageField = document.getElementById("ageField");
 const ageWarn = document.getElementById("ageWarn");
 ageField.addEventListener("input", () => {
@@ -470,6 +486,7 @@ function bubble(text, cls) {
   el.textContent = text;
   feed.appendChild(el);
   feed.scrollTop = feed.scrollHeight;
+  return el;
 }
 
 function typing() {
@@ -481,14 +498,26 @@ function typing() {
   return el;
 }
 
-function startChat() {
+/* Завершение онбординга: профиль сохраняется на бэкенде */
+async function startChat() {
+  const err = document.getElementById("profileErr");
+  err.style.display = "none";
+  try {
+    await api("/api/profile", {
+      first_name: state.name,
+      age: state.age,
+      topic: state.topic,
+    });
+  } catch (e) {
+    console.error(e);
+    err.style.display = "block";
+    return;
+  }
   go(4);
-  /* Профиль (state) пока живёт только на фронте; в шаге 3 здесь
-     появится POST /api/profile перед входом в чат. */
   bubble(`Здравствуйте, ${state.name}. Вы отметили: «${state.topic.toLowerCase()}». Расскажите, что происходит — начнём с того, что важно вам.`, "bot");
 }
 
-/* Отправка в бэкенд */
+/* Отправка сообщения */
 async function send() {
   const text = msg.value.trim();
   if (!text) return;
@@ -498,13 +527,7 @@ async function send() {
   sendBtn.disabled = true;
   const t = typing();
   try {
-    const res = await fetch("/api/chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ init_data: initData, message: text }),
-    });
-    if (!res.ok) throw new Error("HTTP " + res.status);
-    const data = await res.json();
+    const data = await api("/api/chat", { message: text });
     t.remove();
     bubble(data.reply, "bot");
   } catch (err) {
@@ -525,6 +548,33 @@ msg.addEventListener("input", () => {
   msg.style.height = "auto";
   msg.style.height = Math.min(msg.scrollHeight, 110) + "px";
 });
+
+/* ── Бутстрап: зарегистрированный пользователь попадает
+      сразу в чат с восстановленной историей ─────────────── */
+(async () => {
+  let me;
+  try {
+    me = await api("/api/me", {});
+  } catch (_) {
+    return; // бэкенд недоступен или профиль не проверить — онбординг
+  }
+  if (!me.onboarded) return;
+
+  state.name = me.first_name;
+  state.topic = me.topic ?? "просто поговорить";
+  go(4);
+
+  try {
+    const data = await api("/api/history", {});
+    for (const m of data.messages) {
+      bubble(m.content, m.role === "user" ? "me" : "bot");
+    }
+    if (data.messages.length > 0) return;
+  } catch (_) {
+    /* история не загрузилась — ниже приветствие */
+  }
+  bubble(`С возвращением, ${state.name}. О чём хотите поговорить?`, "bot");
+})();
 </script>
 </body>
 </html>
