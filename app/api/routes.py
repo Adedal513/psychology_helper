@@ -26,7 +26,7 @@ def _auth(init_data: str) -> dict:
     try:
         return validate_init_data(init_data)["user"]
     except InitDataError as e:
-        raise HTTPException(status_code=401, detail=str(e))
+        raise HTTPException(status_code=401, detail=str(e)) from None
 
 
 # ── Профиль ──────────────────────────────────────────────
