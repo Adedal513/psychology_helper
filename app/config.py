@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     dev_mode: bool = False
 
     class Config:
-        env_file = '.env'
+        env_file = ".env"
+
 
 settings = Settings()
