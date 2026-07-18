@@ -94,16 +94,16 @@ async def chat(req: ChatRequest, db: AsyncSession = Depends(get_db)) -> ChatResp
     await db.commit()
     return ChatResponse(reply=reply)
 
+
 # ── История сообщений ──────────────────────────────────────────────────
+
 
 class HistoryRequest(BaseModel):
     init_data: str
 
 
 @router.post("/history")
-async def history(
-    req: HistoryRequest, db: AsyncSession = Depends(get_db)
-) -> dict:
+async def history(req: HistoryRequest, db: AsyncSession = Depends(get_db)) -> dict:
     tg_user = _auth(req.init_data)
     user = await repo.get_or_create_user(
         db, tg_user["id"], tg_user.get("first_name", "")
@@ -116,13 +116,13 @@ async def history(
     await db.commit()
     return {"messages": messages}
 
+
 class MeRequest(BaseModel):
     init_data: str
 
+
 @router.post("/me")
-async def me(
-    req: MeRequest, db: AsyncSession = Depends(get_db)
-) -> dict:
+async def me(req: MeRequest, db: AsyncSession = Depends(get_db)) -> dict:
     tg_user = _auth(req.init_data)
     user = await repo.get_or_create_user(
         db, tg_user["id"], tg_user.get("first_name", "")
