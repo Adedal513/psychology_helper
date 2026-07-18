@@ -1,0 +1,33 @@
+[project]
+name = "psychology-helper"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi>=0.139.2",
+    "pydantic-settings>=2.14.2",
+    "ruff>=0.15.22",
+    "uvicorn>=0.51.0",
+]
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+# frontend/ — не Python; alembic-миграции добавятся сюда же, когда появятся
+extend-exclude = ["frontend"]
+ 
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort — порядок импортов
+    "UP",   # pyupgrade — современный синтаксис
+    "B",    # flake8-bugbear — вероятные баги
+    "SIM",  # flake8-simplify
+    "ASYNC",# ловит блокирующие вызовы в async-коде — важно для FastAPI
+]
+ 
+[tool.ruff.format]
+quote-style = "double"
