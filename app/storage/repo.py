@@ -45,7 +45,7 @@ async def get_history(db: AsyncSession, session: ChatSession, limit: int) -> lis
     rows = await db.scalars(
         select(Message)
         .where(Message.session_id == session.id)
-        .order_by(Message.created_at.desc())
+        .order_by(Message.id.desc())
         .limit(limit)
     )
     return [{"role": m.role, "content": m.content} for m in reversed(list(rows))]
