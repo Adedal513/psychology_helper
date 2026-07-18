@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.inference.base import InferenceBackend
+from app.inference.openai_compat import OpenAICompatBackend
 from app.inference.stub import StubBackend
 from app.security import InitDataError, validate_init_data
 from app.storage import repo
@@ -11,13 +12,24 @@ from app.storage.db import get_db
 
 router = APIRouter(prefix="/api")
 
-# Точка выбора бэкенда инференса (шаг 4: чтение из settings)
-inference: InferenceBackend = StubBackend()
 
+# Точка выбора бэкенда инференса
+def _make_inference() -> InferenceBackend:
+    if settings.inference_backend == "openai_compat":
+        return OpenAICompatBackend()
+    return StubBackend()
+
+
+inference: InferenceBackend = _make_inference()
 SYSTEM_PROMPT_TEMPLATE = (
     "Ты — ассистент психологического сервиса. "
     "Пользователь: {name}, возраст: {age}. Тема обращения: {topic}. "
-    "Черновой промпт, содержательная версия — отдельная итерация."
+    """Формат ответов:
+    - Отвечай кратко: 2–4 предложения, до ~60 слов. Это переписка в мессенджере, а не письмо.
+    - Одно сообщение — одна мысль. Не объединяй наблюдение, совет и вопрос в одном ответе.
+    - Заканчивай одним открытым вопросом, когда уместно. Не более одного вопроса за ответ.
+    - Без списков, заголовков и markdown-разметки — только обычный разговорный текст.
+    - Не начинай каждый ответ с пересказа слов собеседника."""
 )
 
 
@@ -52,6 +64,15 @@ async def save_profile(req: ProfileRequest, db: AsyncSession = Depends(get_db)) 
         db, tg_user["id"], tg_user.get("first_name", "")
     )
     await repo.update_profile(db, user, req.first_name, req.age, req.topic)
+
+    session = await repo.get_or_create_active_session(db, user)
+    greeting = (
+        f"Здравствуйте, {req.first_name}. Вы отметили: "
+        f"«{req.topic.lower()}». Расскажите, что происходит — "
+        f"начнём с того, что важно вам."
+    )
+    await repo.add_message(db, session, "assistant", greeting)
+
     await db.commit()
     return {"ok": True}
 
@@ -80,10 +101,10 @@ async def chat(req: ChatRequest, db: AsyncSession = Depends(get_db)) -> ChatResp
         raise HTTPException(status_code=409, detail="profile required")
 
     session = await repo.get_or_create_active_session(db, user)
-    await repo.add_message(db, session, "user", req.message)
-
     history = await repo.get_history(db, session, settings.history_limit)
-    # Новое сообщение уже в history: add_message выше, flush внутри session
+    history.append({"role": "user", "content": req.message})
+
+    await repo.add_message(db, session, "user", req.message)
 
     system_prompt = SYSTEM_PROMPT_TEMPLATE.format(
         name=user.first_name, age=user.age, topic=user.topic
